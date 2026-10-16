@@ -1,133 +1,54 @@
 package com.banka.bankapp;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.List;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 public class HesapController {
 
-    private final HesapRepository hesapRepository;
-    private final HareketRepository hareketRepository;
+    private final HesapService hesapService;
 
-    public HesapController(HesapRepository hesapRepository, HareketRepository hareketRepository) {
-        this.hesapRepository = hesapRepository;
-        this.hareketRepository = hareketRepository;
-    }
-
-    private void tutarKontrol(BigDecimal tutar) {
-        if (tutar == null || tutar.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tutar sifirdan buyuk olmali");
-        }
-        if (tutar.stripTrailingZeros().scale() > 2) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tutar en fazla 2 ondalik basamak icerebilir");
-        }
-    }
-
-    private void hareketKaydet(Hesap hesap, String tur, BigDecimal tutar) {
-        Hareket hareket = new Hareket(
-                hesap.getHesapNo(),
-                tur,
-                tutar,
-                hesap.getBakiye(),
-                LocalDateTime.now());
-        hareketRepository.save(hareket);
-    }
-
-    private Hesap hesapBul(int hesapNo) {
-        return hesapRepository.findByHesapNo(hesapNo)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hesap bulunamadi"));
+    public HesapController(HesapService hesapService) {
+        this.hesapService = hesapService;
     }
 
     @GetMapping("/hesaplar")
     public List<Hesap> tumHesaplar() {
-        return hesapRepository.findAll();
+        return hesapService.tumHesaplar();
     }
 
     @GetMapping("/hesaplar/{hesapNo}")
     public Hesap hesapGetir(@PathVariable int hesapNo) {
-        return hesapBul(hesapNo);
+        return hesapService.hesapGetir(hesapNo);
     }
 
     @GetMapping("/hesaplar/{hesapNo}/hareketler")
     public List<Hareket> hesapHareketleri(@PathVariable int hesapNo) {
-        hesapBul(hesapNo);
-        return hareketRepository.findByHesapNoOrderByIdAsc(hesapNo);
+        return hesapService.hareketler(hesapNo);
     }
 
     @PostMapping("/hesaplar")
-    @Transactional
     public Hesap hesapAc(@RequestBody HesapOlusturIstegi istek) {
-        if (istek.bakiye() == null || istek.bakiye().compareTo(BigDecimal.ZERO) < 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Acilis bakiyesi negatif olamaz");
-        }
-        int yeniHesapNo = 1001 + (int) hesapRepository.count();
-        Hesap yeniHesap = hesapRepository.save(new Hesap(istek.sahibi(), yeniHesapNo, istek.bakiye()));
-        hareketKaydet(yeniHesap, "ACILIS", istek.bakiye());
-        return yeniHesap;
+        return hesapService.hesapAc(istek.sahibi(), istek.bakiye());
     }
 
     @PostMapping("/hesaplar/{hesapNo}/yatir")
-    @Transactional
     public Hesap paraYatir(@PathVariable int hesapNo, @RequestBody TutarIstegi istek) {
-        tutarKontrol(istek.tutar());
-        Hesap hesap = hesapBul(hesapNo);
-        hesap.paraYatir(istek.tutar());
-        hesapRepository.save(hesap);
-        hareketKaydet(hesap, "YATIRMA", istek.tutar());
-        return hesap;
+        return hesapService.paraYatir(hesapNo, istek.tutar());
     }
 
     @PostMapping("/hesaplar/{hesapNo}/cek")
-    @Transactional
     public Hesap paraCek(@PathVariable int hesapNo, @RequestBody TutarIstegi istek) {
-        tutarKontrol(istek.tutar());
-        Hesap hesap = hesapBul(hesapNo);
-        boolean basarili = hesap.paraCek(istek.tutar());
-        if (!basarili) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Yetersiz bakiye");
-        }
-        hesapRepository.save(hesap);
-        hareketKaydet(hesap, "CEKME", istek.tutar());
-        return hesap;
+        return hesapService.paraCek(hesapNo, istek.tutar());
     }
 
     @PostMapping("/transferler")
-    @Transactional
     public TransferSonucu transfer(@RequestBody TransferIstegi istek) {
-        tutarKontrol(istek.tutar());
-        if (istek.kaynakHesapNo() == istek.hedefHesapNo()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ayni hesaba transfer yapilamaz");
-        }
-
-        Hesap kaynak = hesapBul(istek.kaynakHesapNo());
-        Hesap hedef = hesapBul(istek.hedefHesapNo());
-
-        boolean basarili = kaynak.paraCek(istek.tutar());
-        if (!basarili) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Yetersiz bakiye");
-        }
-        hesapRepository.save(kaynak);
-        hareketKaydet(kaynak, "TRANSFER_GIDEN", istek.tutar());
-
-        hedef.paraYatir(istek.tutar());
-        hesapRepository.save(hedef);
-        hareketKaydet(hedef, "TRANSFER_GELEN", istek.tutar());
-
-        return new TransferSonucu(
-                kaynak.getSahibi(),
-                hedef.getSahibi(),
-                istek.tutar(),
-                kaynak.getBakiye(),
-                hedef.getBakiye());
+        return hesapService.transfer(istek.kaynakHesapNo(), istek.hedefHesapNo(), istek.tutar());
     }
 }

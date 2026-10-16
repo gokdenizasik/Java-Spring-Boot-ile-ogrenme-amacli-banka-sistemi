@@ -1,0 +1,122 @@
+package com.banka.bankapp;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+@Service
+public class HesapService {
+
+    private final HesapRepository hesapRepository;
+    private final HareketRepository hareketRepository;
+
+    public HesapService(HesapRepository hesapRepository, HareketRepository hareketRepository) {
+        this.hesapRepository = hesapRepository;
+        this.hareketRepository = hareketRepository;
+    }
+
+    private void tutarKontrol(BigDecimal tutar) {
+        if (tutar == null || tutar.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tutar sifirdan buyuk olmali");
+        }
+        if (tutar.stripTrailingZeros().scale() > 2) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tutar en fazla 2 ondalik basamak icerebilir");
+        }
+    }
+
+    private void hareketKaydet(Hesap hesap, String tur, BigDecimal tutar) {
+        Hareket hareket = new Hareket(
+                hesap.getHesapNo(),
+                tur,
+                tutar,
+                hesap.getBakiye(),
+                LocalDateTime.now());
+        hareketRepository.save(hareket);
+    }
+
+    private Hesap hesapBul(int hesapNo) {
+        return hesapRepository.findByHesapNo(hesapNo)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hesap bulunamadi"));
+    }
+
+    public List<Hesap> tumHesaplar() {
+        return hesapRepository.findAll();
+    }
+
+    public Hesap hesapGetir(int hesapNo) {
+        return hesapBul(hesapNo);
+    }
+
+    public List<Hareket> hareketler(int hesapNo) {
+        hesapBul(hesapNo);
+        return hareketRepository.findByHesapNoOrderByIdAsc(hesapNo);
+    }
+
+    @Transactional
+    public Hesap hesapAc(String sahibi, BigDecimal bakiye) {
+        if (bakiye == null || bakiye.compareTo(BigDecimal.ZERO) < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Acilis bakiyesi negatif olamaz");
+        }
+        int yeniHesapNo = 1001 + (int) hesapRepository.count();
+        Hesap yeniHesap = hesapRepository.save(new Hesap(sahibi, yeniHesapNo, bakiye));
+        hareketKaydet(yeniHesap, "ACILIS", bakiye);
+        return yeniHesap;
+    }
+
+    @Transactional
+    public Hesap paraYatir(int hesapNo, BigDecimal tutar) {
+        tutarKontrol(tutar);
+        Hesap hesap = hesapBul(hesapNo);
+        hesap.paraYatir(tutar);
+        hesapRepository.save(hesap);
+        hareketKaydet(hesap, "YATIRMA", tutar);
+        return hesap;
+    }
+
+    @Transactional
+    public Hesap paraCek(int hesapNo, BigDecimal tutar) {
+        tutarKontrol(tutar);
+        Hesap hesap = hesapBul(hesapNo);
+        boolean basarili = hesap.paraCek(tutar);
+        if (!basarili) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Yetersiz bakiye");
+        }
+        hesapRepository.save(hesap);
+        hareketKaydet(hesap, "CEKME", tutar);
+        return hesap;
+    }
+
+    @Transactional
+    public TransferSonucu transfer(int kaynakHesapNo, int hedefHesapNo, BigDecimal tutar) {
+        tutarKontrol(tutar);
+        if (kaynakHesapNo == hedefHesapNo) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ayni hesaba transfer yapilamaz");
+        }
+
+        Hesap kaynak = hesapBul(kaynakHesapNo);
+        Hesap hedef = hesapBul(hedefHesapNo);
+
+        boolean basarili = kaynak.paraCek(tutar);
+        if (!basarili) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Yetersiz bakiye");
+        }
+        hesapRepository.save(kaynak);
+        hareketKaydet(kaynak, "TRANSFER_GIDEN", tutar);
+
+        hedef.paraYatir(tutar);
+        hesapRepository.save(hedef);
+        hareketKaydet(hedef, "TRANSFER_GELEN", tutar);
+
+        return new TransferSonucu(
+                kaynak.getSahibi(),
+                hedef.getSahibi(),
+                tutar,
+                kaynak.getBakiye(),
+                hedef.getBakiye());
+    }
+}
