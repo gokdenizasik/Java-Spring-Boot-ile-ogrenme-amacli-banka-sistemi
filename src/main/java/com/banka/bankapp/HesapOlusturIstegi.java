@@ -1,4 +1,6 @@
 package com.banka.bankapp;
 
-public record HesapOlusturIstegi(String sahibi, double bakiye) {
+import java.math.BigDecimal;
+
+public record HesapOlusturIstegi(String sahibi, BigDecimal bakiye) {
 }

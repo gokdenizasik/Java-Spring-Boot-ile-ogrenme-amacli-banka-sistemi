@@ -1,5 +1,8 @@
 package com.banka.bankapp;
 
+import java.math.BigDecimal;
+
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -14,12 +17,14 @@ public class Hesap {
 
     private String sahibi;
     private int hesapNo;
-    private double bakiye;
+
+    @Column(precision = 15, scale = 2)
+    private BigDecimal bakiye;
 
     protected Hesap() {
     }
 
-    public Hesap(String sahibi, int hesapNo, double bakiye) {
+    public Hesap(String sahibi, int hesapNo, BigDecimal bakiye) {
         this.sahibi = sahibi;
         this.hesapNo = hesapNo;
         this.bakiye = bakiye;
@@ -33,19 +38,19 @@ public class Hesap {
         return hesapNo;
     }
 
-    public double getBakiye() {
+    public BigDecimal getBakiye() {
         return bakiye;
     }
 
-    public void paraYatir(double tutar) {
-        bakiye = bakiye + tutar;
+    public void paraYatir(BigDecimal tutar) {
+        bakiye = bakiye.add(tutar);
     }
 
-    public boolean paraCek(double tutar) {
-        if (tutar > bakiye) {
+    public boolean paraCek(BigDecimal tutar) {
+        if (tutar.compareTo(bakiye) > 0) {
             return false;
         }
-        bakiye = bakiye - tutar;
+        bakiye = bakiye.subtract(tutar);
         return true;
     }
 }

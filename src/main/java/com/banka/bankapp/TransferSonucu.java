@@ -1,9 +1,11 @@
 package com.banka.bankapp;
 
+import java.math.BigDecimal;
+
 public record TransferSonucu(
         String gonderen,
         String alici,
-        double tutar,
-        double gonderenYeniBakiye,
-        double aliciYeniBakiye) {
+        BigDecimal tutar,
+        BigDecimal gonderenYeniBakiye,
+        BigDecimal aliciYeniBakiye) {
 }

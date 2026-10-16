@@ -1,4 +1,6 @@
 package com.banka.bankapp;
 
-public record TransferIstegi(int kaynakHesapNo, int hedefHesapNo, double tutar) {
+import java.math.BigDecimal;
+
+public record TransferIstegi(int kaynakHesapNo, int hedefHesapNo, BigDecimal tutar) {
 }

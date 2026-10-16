@@ -1,7 +1,9 @@
 package com.banka.bankapp;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -16,14 +18,19 @@ public class Hareket {
 
     private int hesapNo;
     private String tur;
-    private double tutar;
-    private double sonrakiBakiye;
+
+    @Column(precision = 15, scale = 2)
+    private BigDecimal tutar;
+
+    @Column(precision = 15, scale = 2)
+    private BigDecimal sonrakiBakiye;
+
     private LocalDateTime zaman;
 
     protected Hareket() {
     }
 
-    public Hareket(int hesapNo, String tur, double tutar, double sonrakiBakiye, LocalDateTime zaman) {
+    public Hareket(int hesapNo, String tur, BigDecimal tutar, BigDecimal sonrakiBakiye, LocalDateTime zaman) {
         this.hesapNo = hesapNo;
         this.tur = tur;
         this.tutar = tutar;
@@ -39,11 +46,11 @@ public class Hareket {
         return tur;
     }
 
-    public double getTutar() {
+    public BigDecimal getTutar() {
         return tutar;
     }
 
-    public double getSonrakiBakiye() {
+    public BigDecimal getSonrakiBakiye() {
         return sonrakiBakiye;
     }
 

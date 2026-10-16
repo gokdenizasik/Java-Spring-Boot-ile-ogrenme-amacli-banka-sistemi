@@ -1,5 +1,6 @@
 package com.banka.bankapp;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -23,7 +24,16 @@ public class HesapController {
         this.hareketRepository = hareketRepository;
     }
 
-    private void hareketKaydet(Hesap hesap, String tur, double tutar) {
+    private void tutarKontrol(BigDecimal tutar) {
+        if (tutar == null || tutar.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tutar sifirdan buyuk olmali");
+        }
+        if (tutar.stripTrailingZeros().scale() > 2) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tutar en fazla 2 ondalik basamak icerebilir");
+        }
+    }
+
+    private void hareketKaydet(Hesap hesap, String tur, BigDecimal tutar) {
         Hareket hareket = new Hareket(
                 hesap.getHesapNo(),
                 tur,
@@ -57,6 +67,9 @@ public class HesapController {
     @PostMapping("/hesaplar")
     @Transactional
     public Hesap hesapAc(@RequestBody HesapOlusturIstegi istek) {
+        if (istek.bakiye() == null || istek.bakiye().compareTo(BigDecimal.ZERO) < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Acilis bakiyesi negatif olamaz");
+        }
         int yeniHesapNo = 1001 + (int) hesapRepository.count();
         Hesap yeniHesap = hesapRepository.save(new Hesap(istek.sahibi(), yeniHesapNo, istek.bakiye()));
         hareketKaydet(yeniHesap, "ACILIS", istek.bakiye());
@@ -66,9 +79,7 @@ public class HesapController {
     @PostMapping("/hesaplar/{hesapNo}/yatir")
     @Transactional
     public Hesap paraYatir(@PathVariable int hesapNo, @RequestBody TutarIstegi istek) {
-        if (istek.tutar() <= 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tutar sifirdan buyuk olmali");
-        }
+        tutarKontrol(istek.tutar());
         Hesap hesap = hesapBul(hesapNo);
         hesap.paraYatir(istek.tutar());
         hesapRepository.save(hesap);
@@ -79,9 +90,7 @@ public class HesapController {
     @PostMapping("/hesaplar/{hesapNo}/cek")
     @Transactional
     public Hesap paraCek(@PathVariable int hesapNo, @RequestBody TutarIstegi istek) {
-        if (istek.tutar() <= 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tutar sifirdan buyuk olmali");
-        }
+        tutarKontrol(istek.tutar());
         Hesap hesap = hesapBul(hesapNo);
         boolean basarili = hesap.paraCek(istek.tutar());
         if (!basarili) {
@@ -95,9 +104,7 @@ public class HesapController {
     @PostMapping("/transferler")
     @Transactional
     public TransferSonucu transfer(@RequestBody TransferIstegi istek) {
-        if (istek.tutar() <= 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tutar sifirdan buyuk olmali");
-        }
+        tutarKontrol(istek.tutar());
         if (istek.kaynakHesapNo() == istek.hedefHesapNo()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ayni hesaba transfer yapilamaz");
         }
@@ -111,8 +118,6 @@ public class HesapController {
         }
         hesapRepository.save(kaynak);
         hareketKaydet(kaynak, "TRANSFER_GIDEN", istek.tutar());
-
-        
 
         hedef.paraYatir(istek.tutar());
         hesapRepository.save(hedef);

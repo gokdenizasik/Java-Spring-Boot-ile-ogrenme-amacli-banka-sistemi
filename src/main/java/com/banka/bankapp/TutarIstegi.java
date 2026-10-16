@@ -1,4 +1,6 @@
 package com.banka.bankapp;
 
-public record TutarIstegi(double tutar) {
+import java.math.BigDecimal;
+
+public record TutarIstegi(BigDecimal tutar) {
 }
