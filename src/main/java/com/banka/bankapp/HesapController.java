@@ -1,10 +1,10 @@
 package com.banka.bankapp;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,20 +15,12 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 public class HesapController {
 
-    private final List<Hesap> hesaplar = new ArrayList<>();
-    private final List<Hareket> hareketler = new ArrayList<>();
+    private final HesapRepository hesapRepository;
+    private final HareketRepository hareketRepository;
 
-    public HesapController() {
-        hesapEkle("Ayse", 1001, 500.0);
-        hesapEkle("Mehmet", 1002, 200.0);
-        hesapEkle("Zeynep", 1003, 1000.0);
-    }
-
-    private Hesap hesapEkle(String sahibi, int hesapNo, double bakiye) {
-        Hesap hesap = new Hesap(sahibi, hesapNo, bakiye);
-        hesaplar.add(hesap);
-        hareketKaydet(hesap, "ACILIS", bakiye);
-        return hesap;
+    public HesapController(HesapRepository hesapRepository, HareketRepository hareketRepository) {
+        this.hesapRepository = hesapRepository;
+        this.hareketRepository = hareketRepository;
     }
 
     private void hareketKaydet(Hesap hesap, String tur, double tutar) {
@@ -37,22 +29,18 @@ public class HesapController {
                 tur,
                 tutar,
                 hesap.getBakiye(),
-                LocalDateTime.now().toString());
-        hareketler.add(hareket);
+                LocalDateTime.now());
+        hareketRepository.save(hareket);
     }
 
     private Hesap hesapBul(int hesapNo) {
-        for (Hesap hesap : hesaplar) {
-            if (hesap.getHesapNo() == hesapNo) {
-                return hesap;
-            }
-        }
-        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Hesap bulunamadi");
+        return hesapRepository.findByHesapNo(hesapNo)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hesap bulunamadi"));
     }
 
     @GetMapping("/hesaplar")
     public List<Hesap> tumHesaplar() {
-        return hesaplar;
+        return hesapRepository.findAll();
     }
 
     @GetMapping("/hesaplar/{hesapNo}")
@@ -63,33 +51,33 @@ public class HesapController {
     @GetMapping("/hesaplar/{hesapNo}/hareketler")
     public List<Hareket> hesapHareketleri(@PathVariable int hesapNo) {
         hesapBul(hesapNo);
-        List<Hareket> sonuc = new ArrayList<>();
-        for (Hareket hareket : hareketler) {
-            if (hareket.hesapNo() == hesapNo) {
-                sonuc.add(hareket);
-            }
-        }
-        return sonuc;
+        return hareketRepository.findByHesapNoOrderByIdAsc(hesapNo);
     }
 
     @PostMapping("/hesaplar")
+    @Transactional
     public Hesap hesapAc(@RequestBody HesapOlusturIstegi istek) {
-        int yeniHesapNo = 1001 + hesaplar.size();
-        return hesapEkle(istek.sahibi(), yeniHesapNo, istek.bakiye());
+        int yeniHesapNo = 1001 + (int) hesapRepository.count();
+        Hesap yeniHesap = hesapRepository.save(new Hesap(istek.sahibi(), yeniHesapNo, istek.bakiye()));
+        hareketKaydet(yeniHesap, "ACILIS", istek.bakiye());
+        return yeniHesap;
     }
 
     @PostMapping("/hesaplar/{hesapNo}/yatir")
+    @Transactional
     public Hesap paraYatir(@PathVariable int hesapNo, @RequestBody TutarIstegi istek) {
         if (istek.tutar() <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tutar sifirdan buyuk olmali");
         }
         Hesap hesap = hesapBul(hesapNo);
         hesap.paraYatir(istek.tutar());
+        hesapRepository.save(hesap);
         hareketKaydet(hesap, "YATIRMA", istek.tutar());
         return hesap;
     }
 
     @PostMapping("/hesaplar/{hesapNo}/cek")
+    @Transactional
     public Hesap paraCek(@PathVariable int hesapNo, @RequestBody TutarIstegi istek) {
         if (istek.tutar() <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tutar sifirdan buyuk olmali");
@@ -99,11 +87,13 @@ public class HesapController {
         if (!basarili) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Yetersiz bakiye");
         }
+        hesapRepository.save(hesap);
         hareketKaydet(hesap, "CEKME", istek.tutar());
         return hesap;
     }
 
     @PostMapping("/transferler")
+    @Transactional
     public TransferSonucu transfer(@RequestBody TransferIstegi istek) {
         if (istek.tutar() <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tutar sifirdan buyuk olmali");
@@ -119,9 +109,13 @@ public class HesapController {
         if (!basarili) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Yetersiz bakiye");
         }
+        hesapRepository.save(kaynak);
         hareketKaydet(kaynak, "TRANSFER_GIDEN", istek.tutar());
 
+        
+
         hedef.paraYatir(istek.tutar());
+        hesapRepository.save(hedef);
         hareketKaydet(hedef, "TRANSFER_GELEN", istek.tutar());
 
         return new TransferSonucu(

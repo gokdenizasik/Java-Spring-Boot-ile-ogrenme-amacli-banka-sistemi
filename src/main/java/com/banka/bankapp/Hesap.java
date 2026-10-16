@@ -1,10 +1,23 @@
 package com.banka.bankapp;
 
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+
+@Entity
 public class Hesap {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     private String sahibi;
     private int hesapNo;
     private double bakiye;
+
+    protected Hesap() {
+    }
 
     public Hesap(String sahibi, int hesapNo, double bakiye) {
         this.sahibi = sahibi;

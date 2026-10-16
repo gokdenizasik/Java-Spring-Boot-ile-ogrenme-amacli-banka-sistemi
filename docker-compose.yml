@@ -1,0 +1,15 @@
+services:
+  veritabani:
+    image: postgres:16
+    container_name: bankadb
+    environment:
+      POSTGRES_USER: banka
+      POSTGRES_PASSWORD: banka123
+      POSTGRES_DB: bankadb
+    ports:
+      - "5432:5432"
+    volumes:
+      - banka-veri:/var/lib/postgresql/data
+
+volumes:
+  banka-veri:
