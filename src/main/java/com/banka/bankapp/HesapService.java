@@ -3,6 +3,7 @@ package com.banka.bankapp;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -14,10 +15,14 @@ public class HesapService {
 
     private final HesapRepository hesapRepository;
     private final HareketRepository hareketRepository;
+    private final IslemAnahtariRepository islemAnahtariRepository;
 
-    public HesapService(HesapRepository hesapRepository, HareketRepository hareketRepository) {
+    public HesapService(HesapRepository hesapRepository,
+                        HareketRepository hareketRepository,
+                        IslemAnahtariRepository islemAnahtariRepository) {
         this.hesapRepository = hesapRepository;
         this.hareketRepository = hareketRepository;
+        this.islemAnahtariRepository = islemAnahtariRepository;
     }
 
     private void tutarKontrol(BigDecimal tutar) {
@@ -100,7 +105,30 @@ public class HesapService {
     }
 
     @Transactional
-    public TransferSonucu transfer(int kaynakHesapNo, int hedefHesapNo, BigDecimal tutar) {
+    public TransferSonucu transfer(int kaynakHesapNo, int hedefHesapNo, BigDecimal tutar, String anahtar) {
+        boolean anahtarVar = anahtar != null && !anahtar.isBlank();
+
+        if (anahtarVar && anahtar.length() > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Idempotency-Key en fazla 100 karakter olabilir");
+        }
+
+        // Ayni anahtar daha once islendiyse transferi tekrarlama, ilk sonucu don
+        if (anahtarVar) {
+            Optional<IslemAnahtari> kayit = islemAnahtariRepository.findByAnahtar(anahtar);
+            if (kayit.isPresent()) {
+                return kayit.get().sonucuGetir();
+            }
+        }
+
+        TransferSonucu sonuc = transferUygula(kaynakHesapNo, hedefHesapNo, tutar);
+
+        if (anahtarVar) {
+            islemAnahtariRepository.save(new IslemAnahtari(anahtar, sonuc));
+        }
+        return sonuc;
+    }
+
+    private TransferSonucu transferUygula(int kaynakHesapNo, int hedefHesapNo, BigDecimal tutar) {
         tutarKontrol(tutar);
         if (kaynakHesapNo == hedefHesapNo) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ayni hesaba transfer yapilamaz");

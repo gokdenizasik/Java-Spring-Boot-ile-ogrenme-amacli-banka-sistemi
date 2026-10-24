@@ -8,6 +8,6 @@ public class TestController {
 
     @GetMapping("/merhaba")
     public String merhaba() {
-        return "Banka uygulaması başarıyla çalışıyor!";
+        return "Merhaba, banka sistemine hos geldin!";
     }
 }
