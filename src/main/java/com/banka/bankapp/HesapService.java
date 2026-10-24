@@ -44,6 +44,11 @@ public class HesapService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hesap bulunamadi"));
     }
 
+    private Hesap hesapBulKilitli(int hesapNo) {
+        return hesapRepository.findWithLockByHesapNo(hesapNo)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Hesap bulunamadi"));
+    }
+
     public List<Hesap> tumHesaplar() {
         return hesapRepository.findAll();
     }
@@ -59,6 +64,9 @@ public class HesapService {
 
     @Transactional
     public Hesap hesapAc(String sahibi, BigDecimal bakiye) {
+        if (sahibi == null || sahibi.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Hesap sahibi bos olamaz");
+        }
         if (bakiye == null || bakiye.compareTo(BigDecimal.ZERO) < 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Acilis bakiyesi negatif olamaz");
         }
@@ -71,7 +79,7 @@ public class HesapService {
     @Transactional
     public Hesap paraYatir(int hesapNo, BigDecimal tutar) {
         tutarKontrol(tutar);
-        Hesap hesap = hesapBul(hesapNo);
+        Hesap hesap = hesapBulKilitli(hesapNo);
         hesap.paraYatir(tutar);
         hesapRepository.save(hesap);
         hareketKaydet(hesap, "YATIRMA", tutar);
@@ -81,7 +89,7 @@ public class HesapService {
     @Transactional
     public Hesap paraCek(int hesapNo, BigDecimal tutar) {
         tutarKontrol(tutar);
-        Hesap hesap = hesapBul(hesapNo);
+        Hesap hesap = hesapBulKilitli(hesapNo);
         boolean basarili = hesap.paraCek(tutar);
         if (!basarili) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Yetersiz bakiye");
@@ -98,8 +106,14 @@ public class HesapService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ayni hesaba transfer yapilamaz");
         }
 
-        Hesap kaynak = hesapBul(kaynakHesapNo);
-        Hesap hedef = hesapBul(hedefHesapNo);
+        // Kilitleri her zaman kucuk hesap numarasindan baslayarak al (kilitlenme/deadlock onlemi)
+        int kucukNo = Math.min(kaynakHesapNo, hedefHesapNo);
+        int buyukNo = Math.max(kaynakHesapNo, hedefHesapNo);
+        Hesap kucukHesap = hesapBulKilitli(kucukNo);
+        Hesap buyukHesap = hesapBulKilitli(buyukNo);
+
+        Hesap kaynak = (kaynakHesapNo == kucukNo) ? kucukHesap : buyukHesap;
+        Hesap hedef = (hedefHesapNo == kucukNo) ? kucukHesap : buyukHesap;
 
         boolean basarili = kaynak.paraCek(tutar);
         if (!basarili) {
