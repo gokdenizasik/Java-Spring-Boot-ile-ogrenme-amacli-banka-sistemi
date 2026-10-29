@@ -8,9 +8,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final MusteriService musteriService;
+    private final JwtService jwtService;
 
-    public AuthController(MusteriService musteriService) {
+    public AuthController(MusteriService musteriService, JwtService jwtService) {
         this.musteriService = musteriService;
+        this.jwtService = jwtService;
     }
 
     @PostMapping("/auth/kayit")
@@ -19,7 +21,9 @@ public class AuthController {
     }
 
     @PostMapping("/auth/giris")
-    public MusteriOzet giris(@RequestBody KimlikIstegi istek) {
-        return musteriService.giris(istek.kullaniciAdi(), istek.sifre());
+    public GirisSonucu giris(@RequestBody KimlikIstegi istek) {
+        MusteriOzet musteri = musteriService.giris(istek.kullaniciAdi(), istek.sifre());
+        String token = jwtService.tokenUret(musteri);
+        return new GirisSonucu(token, "Bearer", jwtService.getGecerlilikSaniye(), musteri);
     }
 }
